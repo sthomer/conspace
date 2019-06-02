@@ -17,7 +17,7 @@ from multiprocessing.dummy import Pool
 from itertools import repeat
 import json
 
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore")  # annoying DivideByZero warning from entropy
 
 Stats = namedtuple('Stats', 'm_s v_s m_p v_p')
 
@@ -47,7 +47,6 @@ class Dimension:
         # Data structures
         self.stats = {}  # label -> Stats(m_s, v_s, m_p, v_p)
         self.unigram = defaultdict(int)
-        # self.bigram = defaultdict(lambda: defaultdict(int))
         self.bigram = defaultdict(dict)
         self.total = 0
         # Accumulators
@@ -114,7 +113,7 @@ class Dimension:
         V_s = v_s + ((x - M_s) * (x - m_s) - v_s) / n_s if n_s > 1 else v_s
         M_p = (V_s * m_p + v_p * x) / (v_p + V_s)
         V_p = V_s * v_p / (V_s + v_p) if n_s > 1 else v_p
-        self.stats[curr] = Stats(M_s.astype(np.complex64),
+        self.stats[curr] = Stats(M_s.astype(np.complex64),  # save some mem
                                  V_s.astype(np.complex64),
                                  M_p.astype(np.complex64),
                                  V_p.astype(np.complex64))
@@ -129,8 +128,6 @@ class Dimension:
     def interpolate(self, segment):
         length, form = segment.shape[0], segment.shape[1:]
         segment_flat = segment.reshape(length, np.prod(form))
-        # regressor = linear_model.LinearRegression()
-        # regressor = linear_model.MultiTaskElasticNet()
         regressor = gaussian_process.GaussianProcessRegressor()
         ticks = np.cumsum(self.lengths)
         ticks_present = ((ticks / ticks[-1]) * self.resolution)[:, np.newaxis]
@@ -154,13 +151,13 @@ class Dimension:
         curr = self.categorize(x)
         self.update(curr, x, l)
         abstraction, length = None, None
-        if self.level < 3 and self.segment(curr):
+        if self.level < 3 and self.segment(curr):  # Too much mem beyond 3
             abstraction, length = self.abstract()
         self.prev = curr
         return abstraction, length
 
 
-def json_dim(dimensions):
+def json_sequential(dimensions):
     lengths = [np.cumsum([length for segment in dimension.relative_lengths
                           for length in segment]) for dimension in dimensions]
     categories = [np.array([category for segment in dimension.segments
@@ -198,7 +195,7 @@ def json_dim(dimensions):
     return result
 
 
-def json_spec(filename):
+def json_spectrum(filename):
     res = 32
     data, samplerate = sf.read(filename)
     slices_time = util.view_as_windows(data, window_shape=(res,), step=res)
@@ -206,15 +203,22 @@ def json_spec(filename):
     output = []
     for x in range(slices.shape[0]):
         for y in range(slices.shape[1] // 2):
-            output.append({'x': x, 'y': y, 'color': np.abs(slices[x][y])})
+            output.append({'x': x,
+                           'y': y,
+                           'color': np.abs(slices[x][y])})
+    # out_name = 'spectrum-' + str(os.path.basename(filename)).split('.')[0]
     with open('spectrum.json', 'w') as file:
         json.dump(output, file)
     return output
 
 
-def json_wrd(filename):
+def json_annotation(filename, word=True):
     res = 32
-    with open(filename, 'r') as file:
+    directory = os.path.dirname(filename)
+    base = os.path.basename(filename).split('.')[0]
+    load = directory + '/' + str(base) + '.WRD' if word else '.PHN'
+
+    with open(load, 'r') as file:
         output = []
         for line in file:
             cols = line.split()
@@ -222,65 +226,81 @@ def json_wrd(filename):
                            'x': int(cols[1]) / res,
                            'y': 0,
                            'label': cols[2]})
-    with open(filename.split('.')[0] + '.json', 'w') as file:
+    # out_name = 'annotation-' + str(os.path.basename(filename)).split('.')[0]
+    with open('wrd' if word else 'phn' + '-annotations.json', 'w') as file:
         json.dump(output, file)
     return output
 
 
-def main():
-    res = 32
-    # dimensions = [
-    #     Dimension(0, 1e0, res),
-    #     Dimension(1, 1e1, res),
-    #     Dimension(2, 1e2, res),
-    #     Dimension(3, 1e3, res),
-    # ]
-    # for filename in os.listdir('data/flat'):
-    #     print('Loading:', filename)
-    #     data, samplerate = sf.read('data/flat/' + filename)
-    data, samplerate = sf.read('data/flat/SA1.WAV')
-    print('Duration:', len(data) / samplerate, 's')
-
-    if os.path.isfile('clips52.npy'):
+def main(load=None, save=None, checkpoint=None, init=None, json=False, res=32):
+    if not init:
+        dimensions = [
+            Dimension(0, 1e0, res),
+            Dimension(1, 1e1, res),
+            Dimension(2, 1e2, res),
+            Dimension(3, 1e3, res),
+        ]
+    else:
         print('Loading dimensions')
-        dimensions = np.load('clips52.npy', allow_pickle=True)
+        dimensions = np.load(init, allow_pickle=True)
 
     def perceive(x, l=1, i=0):
         superior, length = dimensions[i].perceive(x, l)
         if superior is not None:
             perceive(superior, length, i + 1)
 
-    start = time.time()
+    directory = os.path.dirname(load)
+    if os.path.isfile(load) and load.split('.')[-1] == 'WAV':
+        clips = [os.path.basename(load)]
+    elif os.path.isdir(load):
+        clips = [f for f in os.listdir(load) if f.split('.')[-1] == 'WAV']
+    else:
+        raise FileNotFoundError
 
-    slices_time = util.view_as_windows(data, window_shape=(res,), step=res)
-    slices_freq = fft(slices_time)
+    for clip in clips:
 
-    count = 0
-    total = len(slices_freq)
-    print('Perceiving:', total, 'moments')
-    one_percent = total // (100 - 5)
-    for signal in slices_freq:
-        if count % one_percent == 0:
-            print('Progress: ', count // one_percent, '%', sep='', end='\r')
-        count += 1
-        perceive(signal)
+        print('Loading:', clip)
+        data, sample_rate = sf.read(directory + '/' + clip)
+        print('Duration:', len(data) / sample_rate, 's')
 
-    # Clear Accumulators
-    for dimension in dimensions:
-        dimension.ongoing = []
-        dimension.lengths = []
-        dimension.current = []
-        dimension.prev = None
+        slices_time = util.view_as_windows(data, window_shape=(res,), step=res)
+        slices_freq = fft(slices_time)
 
-    print('Time:', time.time() - start, 's')
-    # print('Saving...')
-    # np.save('parallel.npy', dimensions)
-    # np.save('backup_parallel.npy', dimensions)
-    # print('Done')
+        count = 0
+        total = len(slices_freq)
+        print('Perceiving:', total, 'moments')
+        one_percent = total // (100 - 5)
+        start = time.perf_counter()
+        for signal in slices_freq:
+            if count % one_percent == 0:
+                print('Progress: ', count // one_percent, '%', sep='', end='\r')
+            count += 1
+            perceive(signal)
+        print('Time:', f'{(time.perf_counter() - start):.4f}s')
+
+        for d in dimensions:
+            d.ongoing, d.lengths, d.current, d.prev = [], [], [], None
+
+        if checkpoint:
+            print('Checkpointing...')
+            np.save(checkpoint, dimensions)
+            print('Done')
+    if save:
+        print('Saving...')
+        np.save(save, dimensions)
+        print('Done')
+
+    if json:
+        json_sequential(dimensions)
+        if os.path.isfile(load):
+            json_spectrum(load)
+            json_annotation(load, word=True)
+            json_annotation(load, word=False)
 
     return dimensions
 
 
 if __name__ == '__main__':
-    dims = main()
+    directory = 'TIMIT/TRAIN/DR1/FCJF0/'
+    dims = main(load=directory, save='FCJF0')
     # pass
