@@ -246,12 +246,13 @@ def json_sequential(dimensions, res):
                             for category in segment]) for dimension in dimensions]
     lengths[2] = [lengths[1][index - 1] for index in lengths[2]]
     lengths[3] = [lengths[2][index - 1] for index in lengths[3]]
+    if len(lengths) == 5:
+        lengths[4] = [lengths[3][index - 1] for index in lengths[4]]
     pairs = [np.stack([lengths[i], categories[i]], axis=-1)
              for i in range(len(dimensions))]
     sequence = [[{'x0': pairs[d][i - 1 if i > 0 else 0][0],
                   'x': pairs[d][i][0],
-                  'y': pairs[d][i][1],
-                  'stroke': 'blue' if i % 2 == 0 else 'orange'}
+                  'y': pairs[d][i][1]}
                  for i in range(pairs[d].shape[0])]
                 for d in range(len(dimensions))]
     for d in range(len(dimensions)):
@@ -335,6 +336,54 @@ def json_semantic(dimensions, res):
     return output
 
 
+# Only print top-level every 4 samples
+def json_similarity(dimensions, res):
+    # Spread segments like json_sequential
+    lengths = [np.cumsum([length for segment in dimension.relative_lengths
+                          for length in segment]) for dimension in dimensions]
+    categories = [np.array([category for segment in dimension.segments
+                            for category in segment]) for dimension in dimensions]
+    lengths[2] = [lengths[1][index - 1] for index in lengths[2]]
+    lengths[3] = [lengths[2][index - 1] for index in lengths[3]]
+    pairs = [np.stack([lengths[i], categories[i]], axis=-1)
+             for i in range(len(dimensions))]
+    sequences = [[{'start': pairs[d][i - 1 if i > 0 else 0][0],
+                   'end': pairs[d][i][0],
+                   'category': pairs[d][i][1]}
+                  for i in range(pairs[d].shape[0])]
+                 for d in range(len(dimensions))]
+    for d in range(len(dimensions)):
+        if not sequences[d]:
+            continue
+        sequences[d][0]['start'] = 0
+
+    # Split into length 1 elements
+    flow = []
+    for segment in sequences[-1]:
+        for i in range(int(segment['start']), int(segment['end'])):
+            flow.append(segment['category'])
+
+    # Compute distances
+    d = dimensions[-1]
+    similarity = {}
+    for x in d.stats:
+        similarity[x] = {}
+        for y in d.stats:
+            similarity[x][y] = np.log(norm(d.stats[x].m_p - d.stats[y].m_p) + 1)
+
+    # Heatmap like like json_spectrum
+    output = []
+    for a in range(0, len(flow), res):
+        for b in range(0, len(flow), res):
+            element = {'x': a, 'y': b,
+                       'color': similarity[flow[a]][flow[b]]}
+            output.append(element)
+
+    with open('similarity.json', 'w') as file:
+        json.dump(output, file)
+    return output
+
+
 def main(load=None, save=None, checkpoint=None, init=None, json=False, res=16):
     if not init:
         dimensions = [
@@ -403,6 +452,7 @@ def main(load=None, save=None, checkpoint=None, init=None, json=False, res=16):
     if json:
         json_sequential(dimensions, res)
         json_semantic(dimensions, res)
+        json_similarity(dimensions, 8)
         if os.path.isfile(load):
             json_spectrum(load, res)
             json_annotation(load, res, word=True)
@@ -413,12 +463,12 @@ def main(load=None, save=None, checkpoint=None, init=None, json=False, res=16):
 
 if __name__ == '__main__':
     directory = 'TIMIT/TRAIN/DR1/FCJF0/'
-    mem = 'finish_line.npy'
-    dims = main(load=directory,
-                save=mem,
-                init=None,
-                json=False)
+    # mem = 'testing.npy'
+    # dims = main(load=directory,
+    #             save=mem,
+    #             init=None,
+    #             json=False)
     single = main(load=directory + 'SA1.WAV',
-                  save=None,
-                  init=mem,
+                  save=None,  # 'single.npy',
+                  init='final.npy',
                   json=True)
