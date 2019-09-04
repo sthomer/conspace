@@ -1,0 +1,7 @@
+numpy
+scipy
+matplotlib
+sklearn
+skimage
+dill
+soundfile

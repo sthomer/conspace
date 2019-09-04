@@ -1,5 +1,7 @@
-*
-
-!.gitignore
-!main.py
-!README.md
+json_final
+scale-json
+TIMIT
+trained
+vis
+*.json
+*.npy
