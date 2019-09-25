@@ -12,6 +12,7 @@ from benchmarking import *
 
 warnings.filterwarnings("ignore")  # annoying DivideByZero warning from entropy
 Stats = namedtuple('Stats', 'm_s v_s m_p v_p')
+Location = namedtuple('Location', 'centroid radius')
 pool = Pool()
 
 
@@ -22,6 +23,7 @@ class Dimension:
         self.level, self.radius, self.resolution = level, radius, resolution
         # Data structures
         self.stats = {}  # label -> Stats(m_s, v_s, m_p, v_p)
+        self.locations = {}  # label -> Location(centroid, radius)
         self.unigram = {}  # defaultdict(int)
         self.bigram = {}  # defaultdict(dict)
         self.total = 0
@@ -32,14 +34,13 @@ class Dimension:
         self.segments, self.relative_lengths = [], []
 
     @timer
-    def categorize_loop(self, x):
+    def categorize(self, x):
         candidates = []
-        for label in self.unigram:
-            if label is None:
-                continue
-            centroid = self.stats[label].m_p
+        for label in self.locations:
+            centroid = self.locations[label].centroid
             distance = norm(centroid - x)
-            radius = norm(np.sqrt(self.stats[label].v_p) * 3)  # i.e. 99.7%
+            radius = self.locations[label].radius
+            # radius = norm(np.sqrt(self.stats[label].v_p) * 3)
             if distance <= radius:
                 info = -np.log(self.unigram[label] / self.total)
                 candidates.append((label, info))
@@ -49,33 +50,6 @@ class Dimension:
             best = max(candidates, key=lambda c: c[1])[0]
         return best
 
-    @timer
-    def categorize(self, x):
-        if len(self.unigram) == 0:
-            return uuid.uuid1().hex
-        x = x.ravel()
-        labels, centroids, variances = self.vectors()
-        candidates = self.norms(x, labels, centroids, variances)
-        return candidates[0] if candidates.size else uuid.uuid1().hex
-
-    @timer
-    def vectors(self):
-        # TODO: Slow (40s) These can be cached in self.stats
-        # Let's hope they iterate the same way for each comprehension?
-        labels = np.array([label for label in self.unigram if label is not None])
-        centroids = np.array([self.stats[label].m_p.ravel()
-                              for label in self.unigram if label is not None])
-        variances = np.array([self.stats[label].v_p.ravel()
-                              for label in self.unigram if label is not None])
-        return labels, centroids, variances
-
-    @timer
-    def norms(self, x, labels, centroids, variances):
-        # TODO: VERY slow (190s) Variances can be cached in self.stats
-        radii = norm(np.sqrt(variances * 3), axis=1)
-        distances = norm(centroids - x, axis=1)
-        candidates = labels[np.nonzero(distances <= radii)]
-        return candidates
 
     @timer
     def is_candidate(self, x, label):
@@ -136,6 +110,10 @@ class Dimension:
                   M_p,
                   V_p)
         self.stats[curr] = c
+        centroid = c.m_p
+        radius = norm(np.sqrt(c.v_p) * 3)  # i.e. 99.7%
+        self.locations[curr] = Location(centroid, radius)
+
         self.ongoing.append(c.m_p)  # abstraction over categories
         self.lengths.append(l)
         self.current.append(curr)

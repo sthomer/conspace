@@ -1,3 +1,29 @@
+#     def categorize_arr(self, x):
+#         # Array-style categorization is much slower for some reason?
+#         if len(self.unigram) == 0:
+#             return uuid.uuid1().hex
+#         x = x.ravel()
+#         labels, centroids, radii = self.vectors()
+#         candidates = self.norms(x, labels, centroids, radii)
+#         return candidates[0] if candidates.size else uuid.uuid1().hex
+#
+#     def vectors(self):
+#         # TODO: Slow (40s) These can be cached in self.stats
+#         # Let's hope they iterate the same way for each comprehension?
+#         labels = np.array([label for label in self.locations])
+#         centroids = np.array([self.locations[label].centroid
+#                               for label in labels])
+#         radii = np.array([self.locations[label].radius
+#                           for label in labels])
+#         return labels, centroids, radii
+#
+#     def norms(self, x, labels, centroids, radii):
+#         # TODO: VERY slow (190s) Variances can be cached in self.stats
+#         distances = norm(centroids - x, axis=1)
+#         candidates = labels[np.nonzero(distances <= radii)]
+#         return candidates
+
+
 # Either results in everything categorized together,
 #   or nothing categorized together, depending on prior radius
 # def categorize_union(self, x):
