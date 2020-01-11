@@ -98,10 +98,10 @@ if __name__ == '__main__':
     #      scale=1,
     #      res=16
     #      )
-    file = directory + 'SA1.WAV'
+    file = directory + 'SA2.WAV'
     dims = main(load=file,
          save=None,
-         init=None,
+         init=mem,
          json=True,
          scale=1,
          res=16

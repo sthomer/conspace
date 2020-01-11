@@ -101,11 +101,11 @@ class Dimension:
         n_s = self.unigram[curr]
         M_s = m_s + (x - m_s) / n_s
         V_s = (v_s + ((x - M_s) * (x - m_s) - v_s) / n_s) if n_s > 1 else v_s
-        if np.isclose(v_p + V_s, np.zeros(v_p.shape)).any():
-            M_p, V_p = m_p, v_p
-        else:
-            M_p = (V_s * m_p + v_p * x) / (v_p + V_s)
-            V_p = (V_s * v_p / (V_s + v_p)) if n_s > 1 else v_p
+        # if np.isclose(v_p + V_s, np.zeros(v_p.shape)).any():
+        #     M_p, V_p = m_p, v_p
+        # else:
+        M_p = (V_s * m_p + v_p * x) / (v_p + V_s)
+        V_p = (V_s * v_p / (V_s + v_p)) if n_s > 1 else v_p
         c = Stats(M_s,
                   V_s,
                   M_p,
