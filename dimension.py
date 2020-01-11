@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.fftpack import fft
 from scipy.linalg import norm
+from scipy.stats import entropy
 from sklearn import gaussian_process
 import uuid
 from collections import namedtuple
@@ -120,13 +121,13 @@ class Dimension:
 
     @timer
     def segment(self, curr):
-        # entropy_prev = entropy(np.array(list(self.bigram[self.prev].values())))
-        # entropy_curr = entropy(np.array(list(self.bigram[curr].values())))
+        entropy_prev = entropy(np.array(list(self.bigram[self.prev].values())))
+        entropy_curr = entropy(np.array(list(self.bigram[curr].values())))
         info_prev = -np.log(self.unigram[self.prev] / self.total)
         info_curr = -np.log(self.unigram[curr] / self.total)
-        # return entropy_curr > entropy_prev or info_curr > info_prev
-        threshold = 0
-        return info_curr - info_prev > threshold
+        return entropy_curr > entropy_prev or info_curr > info_prev
+        # threshold = 0
+        # return info_curr - info_prev > threshold
 
     @timer
     def interpolate(self, segment):
@@ -157,7 +158,7 @@ class Dimension:
         curr = self.categorize(x)
         self.update(curr, x, l)
         abstraction, length = None, None
-        if self.level < 1 and self.segment(curr):  # Too much mem beyond 3
+        if self.level < 3 and self.segment(curr):  # Too much mem beyond 3
             abstraction, length = self.abstract()
         self.prev = curr
         return abstraction, length

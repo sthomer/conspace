@@ -36,8 +36,8 @@ def main(load=None, save=None, checkpoint=None, init=None, json=False,
     for clip in clips:
         clip_count += 1
         print('Loading:', clip, '(', clip_count, '/', len(clips), ')')
-        # data, sample_rate = sf.read(directory + '/' + clip)
-        data, sample_rate = sf.read(clip)
+        data, sample_rate = sf.read(directory + '/' + clip)
+        # data, sample_rate = sf.read(clip)
         print('Duration:', len(data) / sample_rate, 's')
 
         slices_time = util.view_as_windows(data, window_shape=(res,), step=res)
@@ -74,24 +74,35 @@ def main(load=None, save=None, checkpoint=None, init=None, json=False,
         print('Done')
 
     if json:
+        print('Generating json...')
         json_sequential(dimensions, res, json)
         json_semantic(dimensions, res, json)
-        # json_similarity(dimensions, 8, json)
+        json_similarity(dimensions, 8, json)
+        json_confusion(load, dimensions, 8, json)
         if os.path.isfile(load):
             json_spectrum(load, res, json)
-            # json_annotation(load, res, json, word=True)
-            # json_annotation(load, res, json, word=False)
+            json_annotation(load, res, json, word=True)
+            json_annotation(load, res, json, word=False)
+        print('Done')
 
     return dimensions
 
 
 if __name__ == '__main__':
-    directory = 'arpeggio-AC.WAV'
-    mem = 'arpeggio-AC.npy'
-    main(load=directory,
+    directory = 'TIMIT/TRAIN/DR1/FCJF0/'
+    mem = 'FCJF0.npy'
+    # main(load=directory,
+    #      save=mem,
+    #      init=None,
+    #      json=False,
+    #      scale=1,
+    #      res=16
+    #      )
+    file = directory + 'SA1.WAV'
+    dims = main(load=file,
          save=None,
          init=None,
-         json='-arpeggio-AC',
-         scale=1000,
-         res=256
+         json=True,
+         scale=1,
+         res=16
          )
